@@ -493,11 +493,11 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     // Continue, as the main goal is verification
   }
 
-  let userSession: Session | null = null;
   let user: User | null = null;
+  let userSession: Session | null = null;
 
   try {
-    const dummyPassword = 'a_strong_dummy_password_123'; // This should be consistent
+    const dummyPassword = `${email}_central_ring_dummy_password`; // Consistent dummy password per email
 
     // Attempt to sign in with password
     const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
@@ -509,8 +509,8 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
       userSession = signInData.session;
       user = signInData.user;
     } else if (signInError && signInError.message.includes('Invalid login credentials')) {
-      // User does not exist, try to sign up with a dummy password
-      console.log('User not found via signInWithPassword, attempting to sign up.');
+      // User exists but dummy password doesn't match, try to sign up (which will update password if user exists)
+      console.log('DEBUG: User exists but dummy password mismatch, attempting to sign up/update password.');
       const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
         email,
         password: dummyPassword,
