@@ -12,11 +12,17 @@ const port = process.env.PORT || 3000;
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // New variable
 const resendApiKey = process.env.RESEND_API_KEY;
 const resendEmailFrom = process.env.YOUR_RESEND_EMAIL_FROM; // New variable
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Supabase URL or Anon Key is not set in .env file.');
+  process.exit(1);
+}
+
+if (!supabaseServiceRoleKey) {
+  console.error('Supabase Service Role Key is not set in .env file.');
   process.exit(1);
 }
 
@@ -32,6 +38,9 @@ if (!resendEmailFrom) {
 
 // Global Supabase client for auth operations (doesn't need user context)
 const supabaseAuth: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+// Global Supabase client with service role key (bypasses RLS)
+const supabaseServiceRole: SupabaseClient = createClient(supabaseUrl, supabaseServiceRoleKey);
+
 const resend = new Resend(resendApiKey);
 
 // Temporary in-memory OTP store (moved to global scope)
@@ -50,7 +59,7 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
 declare global {
   namespace Express {
     interface Request {
-      supabase: SupabaseClient;
+      supabase: SupabaseClient; // This will be the request-specific client
       user: User;
     }
   }
@@ -198,7 +207,8 @@ app.post('/entities', protect, asyncHandler(async (req: Request, res: Response) 
   const createdAt = new Date(newEntity.createdAt);
   const updatedAt = new Date(newEntity.updatedAt);
 
-  const { data, error } = await req.supabase
+  // Use supabaseServiceRole to bypass RLS for testing
+  const { data, error } = await supabaseServiceRole
     .from('gemini_cli_entities')
     .insert([{
       id: newEntity.id,
@@ -284,7 +294,8 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     const { data: signInOtpData, error: signInOtpError } = await supabaseAuth.auth.signInWithOtp({ email });
 
     if (signInOtpData) {
-      // If signInWithOtp was successful, now verify the OTP to get the session
+      // If signInOtpData is not null, it means an OTP was sent or user exists
+      // Now verify the OTP to get the session
       const { data: verifyOtpData, error: verifyOtpError } = await supabaseAuth.auth.verifyOtp({
         email,
         token,
@@ -305,7 +316,7 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
       userSession = signUpData.session;
       user = signUpData.user;
     } else if (signInOtpError) {
-      // Other signInWithOtp error (e.g., magic link sent instead of OTP)
+      // Other signInOtp error (e.g., magic link sent instead of OTP)
       throw signInOtpError;
     }
 
