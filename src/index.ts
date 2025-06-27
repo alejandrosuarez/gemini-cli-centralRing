@@ -87,6 +87,25 @@ const protect = asyncHandler(async (req: Request, res: Response, next: NextFunct
   next();
 });
 
+const optionalAuth = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (token) {
+    const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
+    if (user) {
+      req.user = user;
+      req.supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      });
+      console.log('DEBUG: Optional auth - Authenticated user ID from token:', user.id);
+    } else if (error) {
+      console.warn('DEBUG: Optional auth - Invalid or expired token, proceeding as unauthenticated.', error.message);
+    }
+  }
+  next();
+});
+
 app.get('/', (req: Request, res: Response) => {
   res.send('Central Ring API is running!');
 });
@@ -242,16 +261,14 @@ app.get('/entities', protect, asyncHandler(async (req: Request, res: Response) =
   res.status(200).json(data);
 }));
 
-app.get('/entities/:id', protect, asyncHandler(async (req: Request, res: Response) => {
+app.get('/entities/:id', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const ownerId = req.user.id;
-  console.log(`Fetching entity ${id} for owner: ${ownerId}`);
+  console.log(`Fetching entity ${id} (optional auth).`);
 
-  const { data, error } = await req.supabase
+  const { data, error } = await supabaseServiceRole
     .from('gemini_cli_entities')
     .select('*')
     .eq('id', id)
-    .eq('owner_id', ownerId)
     .single();
 
   if (error) {
@@ -269,9 +286,9 @@ app.get('/entities/:id', protect, asyncHandler(async (req: Request, res: Respons
 app.post('/entities/:id/request-info', protect, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const requestingUserId = req.user.id;
-  const { message } = req.body; // Optional message from the user
+  const { message, attributeNames } = req.body; // Optional message and attributeNames array
 
-  console.log(`User ${requestingUserId} requesting info for entity ${id}`);
+  console.log(`User ${requestingUserId} requesting info for entity ${id}. Attributes: ${attributeNames ? attributeNames.join(', ') : 'None specified'}`);
 
   // Fetch the current entity to update its arrays
   const { data: entity, error: fetchError } = await supabaseServiceRole
@@ -297,7 +314,10 @@ app.post('/entities/:id/request-info', protect, asyncHandler(async (req: Request
     timestamp: new Date().toISOString(),
     userId: requestingUserId,
     action: 'attribute_requested',
-    details: { message: message || 'No specific message provided.' },
+    details: {
+      message: message || 'No specific message provided.',
+      attributeNames: attributeNames || [],
+    },
   });
 
   // Update the entity in Supabase
