@@ -63,6 +63,15 @@ declare global {
 }
 
 // Middleware to protect routes and get user ID
+import jwt from 'jsonwebtoken';
+import jwksClient from 'jwks-rsa';
+
+// ... (rest of your imports)
+
+const CLERK_JWKS_URL = process.env.CLERK_JWKS_URL; // You MUST set this in Vercel env vars
+
+// ... (rest of your code)
+
 const protect = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
   console.log('DEBUG: Protect middleware received token:', token ? token.substring(0, 30) + '...' : 'No token');
@@ -72,22 +81,71 @@ const protect = asyncHandler(async (req: Request, res: Response, next: NextFunct
     return res.status(401).json({ error: 'No authorization token provided.' });
   }
 
-  const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
+  let user: User | null = null;
+  let authError: any = null;
 
-  if (error || !user) {
-    console.error('DEBUG: Protect middleware - Supabase getUser error:', error);
+  // Try Supabase validation first
+  try {
+    const { data: supabaseUser, error: supabaseError } = await supabaseAuth.auth.getUser(token);
+    if (supabaseUser) {
+      user = supabaseUser;
+      req.supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      });
+      console.log('DEBUG: Authenticated via Supabase. User ID:', user.id);
+    } else {
+      authError = supabaseError;
+      console.warn('DEBUG: Supabase validation failed:', authError?.message);
+    }
+  } catch (e: any) {
+    authError = e;
+    console.error('DEBUG: Supabase validation threw an error:', e);
+  }
+
+  // If Supabase validation failed, try Clerk validation
+  if (!user && CLERK_JWKS_URL) {
+    try {
+      const client = jwksClient({
+        jwksUri: CLERK_JWKS_URL,
+      });
+
+      const decodedToken: any = jwt.decode(token, { complete: true });
+      if (!decodedToken || !decodedToken.header.kid) {
+        throw new Error('Invalid token header or missing kid.');
+      }
+
+      const key = await client.getSigningKey(decodedToken.header.kid);
+      const publicKey = key.getPublicKey();
+
+      const verifiedToken: any = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+
+      // Assuming Clerk JWT has user ID in 'sub' claim
+      if (verifiedToken.sub) {
+        // Create a dummy Supabase user object for consistency
+        user = { id: verifiedToken.sub, email: verifiedToken.email || 'clerk_user@example.com' } as User;
+        req.supabase = createClient(supabaseUrl, supabaseAnonKey, {
+          global: {
+            headers: { Authorization: `Bearer ${token}` }, // Still pass the original token
+          },
+        });
+        console.log('DEBUG: Authenticated via Clerk. User ID:', user.id);
+      } else {
+        throw new Error('Clerk token missing user ID (sub claim).');
+      }
+    } catch (e: any) {
+      console.error('DEBUG: Clerk validation failed:', e.message);
+      authError = e;
+    }
+  }
+
+  if (!user) {
+    console.error('DEBUG: Authentication failed for both Supabase and Clerk.');
     return res.status(401).json({ error: 'Invalid or expired token.' });
   }
 
   req.user = user; // Attach user to request object
-  // Create a new Supabase client for this request with the user's access token
-  req.supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: {
-      headers: { Authorization: `Bearer ${token}` },
-    },
-  });
-
-  console.log('DEBUG: Authenticated user ID from token:', user.id); // ADDED LOG
   next();
 });
 
