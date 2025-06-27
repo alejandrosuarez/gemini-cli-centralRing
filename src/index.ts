@@ -266,6 +266,59 @@ app.get('/entities/:id', protect, asyncHandler(async (req: Request, res: Respons
   res.status(200).json(data);
 }));
 
+app.post('/entities/:id/request-info', protect, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const requestingUserId = req.user.id;
+  const { message } = req.body; // Optional message from the user
+
+  console.log(`User ${requestingUserId} requesting info for entity ${id}`);
+
+  // Fetch the current entity to update its arrays
+  const { data: entity, error: fetchError } = await supabaseServiceRole
+    .from('gemini_cli_entities')
+    .select('requested_by_users, interaction_log')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !entity) {
+    console.error(`Error fetching entity ${id} for request-info:`, fetchError);
+    return res.status(404).json({ error: 'Entity not found or error fetching.' });
+  }
+
+  // Update requested_by_users
+  let updatedRequestedByUsers = Array.isArray(entity.requested_by_users) ? entity.requested_by_users : [];
+  if (!updatedRequestedByUsers.includes(requestingUserId)) {
+    updatedRequestedByUsers.push(requestingUserId);
+  }
+
+  // Add to interaction_log
+  let updatedInteractionLog = Array.isArray(entity.interaction_log) ? entity.interaction_log : [];
+  updatedInteractionLog.push({
+    timestamp: new Date().toISOString(),
+    userId: requestingUserId,
+    action: 'attribute_requested',
+    details: { message: message || 'No specific message provided.' },
+  });
+
+  // Update the entity in Supabase
+  const { data, error: updateError } = await supabaseServiceRole
+    .from('gemini_cli_entities')
+    .update({
+      requested_by_users: updatedRequestedByUsers,
+      interaction_log: updatedInteractionLog,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select();
+
+  if (updateError) {
+    console.error(`Error updating entity ${id} with request info:`, updateError);
+    return res.status(500).json({ error: 'Failed to record request.' });
+  }
+
+  res.status(200).json({ message: 'Information request recorded successfully.', entity: data[0] });
+}));
+
 // Auth Endpoints
 app.options('/auth/send-otp', cors()); // Preflight for send-otp
 app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
