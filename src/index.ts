@@ -493,33 +493,62 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     // Continue, as the main goal is verification
   }
 
-  let user: User | null = null;
   let userSession: Session | null = null;
+  let user: User | null = null;
 
   try {
     const dummyPassword = `${email}_central_ring_dummy_password`; // Consistent dummy password per email
 
     // Attempt to sign in with password
-    const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
+    let { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
       email,
       password: dummyPassword,
     });
 
-    if (signInData.session) {
-      userSession = signInData.session;
-      user = signInData.user;
-    } else if (signInError && signInError.message.includes('Invalid login credentials')) {
-      // User exists but dummy password doesn't match, try to sign up (which will update password if user exists)
-      console.log('DEBUG: User exists but dummy password mismatch, attempting to sign up/update password.');
+    if (signInError && signInError.message.includes('Invalid login credentials')) {
+      // User exists but dummy password doesn't match, update password via service role and try again
+      console.log('DEBUG: User exists but dummy password mismatch, attempting to update password via service role.');
+      const { data: userData, error: updateUserError } = await supabaseServiceRole.auth.admin.updateUserById(
+        signInError.user?.id || '', // Use user ID from error if available, otherwise try to find by email
+        { password: dummyPassword }
+      );
+
+      if (updateUserError) {
+        console.error('DEBUG: Error updating user password via service role:', updateUserError);
+        // If update fails, it might be a new user or other issue, try signup as fallback
+        const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
+          email,
+          password: dummyPassword,
+        });
+        if (signUpError) throw signUpError;
+        signInData = signUpData; // Use data from successful signup
+      } else {
+        // Password updated, try signing in again
+        console.log('DEBUG: Password updated via service role, retrying sign in.');
+        const { data: retrySignInData, error: retrySignInError } = await supabaseAuth.auth.signInWithPassword({
+          email,
+          password: dummyPassword,
+        });
+        if (retrySignInError) throw retrySignInError;
+        signInData = retrySignInData; // Use data from successful retry
+      }
+    } else if (signInError && signInError.message.includes('User not found')) {
+      // User does not exist, proceed with sign up
+      console.log('DEBUG: User not found via signInWithPassword, attempting to sign up.');
       const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
         email,
         password: dummyPassword,
       });
       if (signUpError) throw signUpError;
-      userSession = signUpData.session;
-      user = signUpData.user;
+      signInData = signUpData; // Use data from successful signup
     } else if (signInError) {
+      // Other signInError
       throw signInError;
+    }
+
+    if (signInData.session) {
+      userSession = signInData.session;
+      user = signInData.user;
     }
 
     if (!userSession || !user) {
@@ -528,6 +557,10 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
 
     return res.status(200).json({ message: 'OTP verified. User session created.', session: userSession });
   } catch (error: any) {
+    console.error('Error during Supabase authentication:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+}));
     console.error('Error during Supabase authentication:', error.message);
     return res.status(500).json({ error: error.message });
   }
