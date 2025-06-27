@@ -182,6 +182,7 @@ function App() {
         ownerId: session.user.id, // Set ownerId from authenticated user
         createdAt: new Date(),
         updatedAt: new Date(),
+        missingInfoAttributes: missingRequired, // Include missing attributes
       });
       setNewEntity({ id: '', typeId: '', name: '', attributes: [], createdAt: new Date(), updatedAt: new Date(), ownerId: '' });
       fetchEntities();
