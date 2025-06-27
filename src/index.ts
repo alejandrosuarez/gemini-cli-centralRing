@@ -290,37 +290,15 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
   let user: User | null = null;
 
   try {
-    const dummyPassword = 'a_strong_dummy_password_123'; // This should be consistent
+    const { data: verifyOtpData, error: verifyOtpError } = await supabaseAuth.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
+    });
 
-    // Attempt to sign in with OTP (passwordless login for existing users)
-    const { data: signInOtpData, error: signInOtpError } = await supabaseAuth.auth.signInWithOtp({ email });
-
-    if (signInOtpData) {
-      // If signInOtpData is not null, it means an OTP was sent or user exists
-      // Now verify the OTP to get the session
-      const { data: verifyOtpData, error: verifyOtpError } = await supabaseAuth.auth.verifyOtp({
-        email,
-        token,
-        type: 'email',
-      });
-
-      if (verifyOtpError) throw verifyOtpError;
-      userSession = verifyOtpData.session;
-      user = verifyOtpData.user;
-    } else if (signInOtpError && signInOtpError.message.includes('User not found')) {
-      // User does not exist, try to sign up with a dummy password
-      console.log('User not found via signInWithOtp, attempting to sign up.');
-      const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
-        email,
-        password: dummyPassword,
-      });
-      if (signUpError) throw signUpError;
-      userSession = signUpData.session;
-      user = signUpData.user;
-    } else if (signInOtpError) {
-      // Other signInOtp error (e.g., magic link sent instead of OTP)
-      throw signInOtpError;
-    }
+    if (verifyOtpError) throw verifyOtpError;
+    userSession = verifyOtpData.session;
+    user = verifyOtpData.user;
 
     if (!userSession || !user) {
       throw new Error('Failed to create user session after OTP verification.');
