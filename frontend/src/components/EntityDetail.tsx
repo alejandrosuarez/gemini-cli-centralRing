@@ -100,7 +100,8 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
     <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '8px', marginTop: '20px' }}>
       <h2>Entity Details: {entity.name}</h2>
       <p><strong>ID:</strong> {entity.id}</p>
-      <p><strong>Type:</strong> {entity.typeId}</p>
+      <p><strong>Type:</strong> {entity.entityType?.name || entity.typeId}</p>
+      {entity.entityType?.description && <p><strong>Type Description:</strong> {entity.entityType.description}</p>}
       <p><strong>Owner:</strong> {entity.ownerId}</p>
       <p><strong>Created At:</strong> {new Date(entity.createdAt).toLocaleString()}</p>
       <p><strong>Updated At:</strong> {new Date(entity.updatedAt).toLocaleString()}</p>
@@ -118,20 +119,20 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
       {session && (
         <div style={{ marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
           <h3>Interaction Options:</h3>
-          {!isOwner && (
+          {!isOwner && entity.entityType && (
             <div style={{ marginBottom: '15px' }}>
               <h4>Request Missing Info / Add Message:</h4>
-              {entity.missingInfoAttributes && entity.missingInfoAttributes.length > 0 && (
+              {entity.entityType.predefinedAttributes.length > 0 && (
                 <div style={{ marginBottom: '10px' }}>
                   <p>Select attributes to request:</p>
-                  {entity.missingInfoAttributes.map((attrName: string) => (
-                    <label key={attrName} style={{ display: 'block' }}>
+                  {entity.entityType.predefinedAttributes.map((attr: any) => (
+                    <label key={attr.name} style={{ display: 'block' }}>
                       <input
                         type="checkbox"
-                        checked={selectedAttributesToRequest.includes(attrName)}
-                        onChange={() => handleAttributeCheckboxChange(attrName)}
+                        checked={selectedAttributesToRequest.includes(attr.name)}
+                        onChange={() => handleAttributeCheckboxChange(attr.name)}
                       />
-                      {attrName}
+                      {attr.name} ({attr.type}) {attr.required ? '(Required)' : ''}
                     </label>
                   ))}
                 </div>
