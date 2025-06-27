@@ -65,13 +65,17 @@ declare global {
 // Middleware to protect routes and get user ID
 const protect = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
+  console.log('DEBUG: Protect middleware received token:', token ? token.substring(0, 30) + '...' : 'No token');
+
   if (!token) {
+    console.warn('DEBUG: Protect middleware - No authorization token provided.');
     return res.status(401).json({ error: 'No authorization token provided.' });
   }
 
   const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
 
   if (error || !user) {
+    console.error('DEBUG: Protect middleware - Supabase getUser error:', error);
     return res.status(401).json({ error: 'Invalid or expired token.' });
   }
 
