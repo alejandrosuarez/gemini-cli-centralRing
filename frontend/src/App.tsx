@@ -55,17 +55,20 @@ function App() {
   useEffect(() => {
     const storedSession = localStorage.getItem('supabaseSession');
     if (storedSession) {
-      setSession(JSON.parse(storedSession));
+      const parsedSession = JSON.parse(storedSession);
+      setSession(parsedSession);
+      console.log('DEBUG: Session loaded from localStorage:', parsedSession);
+    } else {
+      console.log('DEBUG: No session found in localStorage.');
     }
   }, []);
 
   useEffect(() => {
+    console.log('DEBUG: Session state changed:', session);
     if (session?.access_token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${session.access_token}`;
       fetchEntityTypes();
       fetchEntities();
     } else {
-      delete axios.defaults.headers.common['Authorization'];
       setEntityTypes([]);
       setEntities([]);
     }
@@ -118,7 +121,14 @@ function App() {
 
   const fetchEntityTypes = async () => {
     try {
-      const response = await axios.get<EntityType[]>(`${API_BASE_URL}/entity-types`);
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+        console.log('DEBUG: fetchEntityTypes - Using access token:', session.access_token);
+      } else {
+        console.log('DEBUG: fetchEntityTypes - No access token available.');
+      }
+      const response = await axios.get<EntityType[]>(`${API_BASE_URL}/entity-types`, { headers });
       setEntityTypes(response.data);
     } catch (error: unknown) {
       console.error('Error fetching entity types:', error);
