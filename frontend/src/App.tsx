@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { EntityDetail } from './components/EntityDetail';
+import { MarketplacePage } from './components/MarketplacePage';
+import { createClient } from '@supabase/supabase-js';
+
+// Supabase client initialization
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Supabase URL or Anon Key is not set in .env.local file.');
+}
+
+const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
 
 export interface Attribute {
   name: string;
@@ -36,6 +47,7 @@ export interface Entity {
     action: string; // e.g., 'view', 'edit', 'attribute_requested', 'attribute_filled'
     details?: any;
   }[];
+  entityType?: EntityType; // Add entityType to the Entity interface
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -52,19 +64,26 @@ function App() {
   const [newEntity, setNewEntity] = useState<Partial<Entity>>({ id: '', typeId: '', name: '', attributes: [], createdAt: new Date(), updatedAt: new Date(), ownerId: '' });
   const [selectedEntityType, setSelectedEntityType] = useState<EntityType | null>(null);
 
+  // Supabase Auth State Change Listener
   useEffect(() => {
-    const storedSession = localStorage.getItem('supabaseSession');
-    if (storedSession) {
-      const parsedSession = JSON.parse(storedSession);
-      setSession(parsedSession);
-      console.log('DEBUG: Session loaded from localStorage:', parsedSession);
-    } else {
-      console.log('DEBUG: No session found in localStorage.');
-    }
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('DEBUG: Supabase auth state changed - Event:', _event, 'Session:', session);
+      setSession(session);
+    });
+
+    // Initial session check
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('DEBUG: Initial getSession result:', session);
+      setSession(session);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
-    console.log('DEBUG: Session state changed:', session);
+    console.log('DEBUG: App component session state updated:', session);
     if (session?.access_token) {
       fetchEntityTypes();
       fetchEntities();
@@ -76,12 +95,12 @@ function App() {
 
   useEffect(() => {
     if (newEntity.typeId) {
-      const type = entityTypes.find(et => et.id === newEntity.typeId);
+      const type = entityTypes.find((et: EntityType) => et.id === newEntity.typeId);
       setSelectedEntityType(type || null);
       if (type) {
-        setNewEntity(prev => ({
+        setNewEntity((prev: Partial<Entity>) => ({
           ...prev,
-          attributes: type.predefinedAttributes.map(attr => ({
+          attributes: type.predefinedAttributes.map((attr: Attribute) => ({
             ...attr,
             value: attr.defaultValue || undefined,
             notApplicable: false,
@@ -94,6 +113,7 @@ function App() {
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Use backend for sending OTP
       const response = await axios.post(`${API_BASE_URL}/auth/send-otp`, { email });
       setMessage(response.data.message);
     } catch (error: unknown) {
@@ -104,19 +124,24 @@ function App() {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Use backend for verifying OTP, which then uses Supabase's signInWithPassword/signUp
       const response = await axios.post(`${API_BASE_URL}/auth/verify-otp`, { email, token: otp });
-      setSession(response.data.session); // Backend now returns 'session' directly
-      localStorage.setItem('supabaseSession', JSON.stringify(response.data.session));
+      // Explicitly set the session on the Supabase client
+      await supabase.auth.setSession(response.data.session);
       setMessage(response.data.message);
     } catch (error: unknown) {
       setMessage(`Error verifying OTP: ${(error as any).response?.data?.error || (error as Error).message}`);
     }
-  };
+};
 
-  const handleLogout = () => {
-    setSession(null);
-    localStorage.removeItem('supabaseSession');
-    setMessage('Logged out.');
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      setMessage('Logged out successfully.');
+    } catch (error: any) {
+      setMessage(`Error logging out: ${error.message}`);
+    }
   };
 
   const fetchEntityTypes = async () => {
@@ -167,9 +192,9 @@ function App() {
   };
 
   const handleAttributeChange = (attrName: string, value: any, isNotApplicable: boolean) => {
-    setNewEntity(prev => ({
+    setNewEntity((prev: Partial<Entity>) => ({
       ...prev,
-      attributes: prev.attributes?.map(attr =>
+      attributes: prev.attributes?.map((attr: Attribute) =>
         attr.name === attrName
           ? { ...attr, value: isNotApplicable ? undefined : value, notApplicable: isNotApplicable }
           : attr
@@ -180,13 +205,13 @@ function App() {
   const handleAddEntity = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const attributesToSubmit = newEntity.attributes?.filter(attr => 
+      const attributesToSubmit = newEntity.attributes?.filter((attr: Attribute) => 
         !attr.notApplicable && (attr.value !== undefined && attr.value !== null && attr.value !== '')
       ) || [];
 
-      const missingRequired = newEntity.attributes?.filter(attr => 
+      const missingRequired = newEntity.attributes?.filter((attr: Attribute) => 
         attr.required && !attr.notApplicable && (attr.value === undefined || attr.value === null || attr.value === '')
-      ).map(attr => attr.name) || [];
+      ).map((attr: Attribute) => attr.name) || [];
 
       if (missingRequired.length > 0) {
         alert(`Please fill in the following required attributes: ${missingRequired.join(', ')}`);
@@ -210,10 +235,17 @@ function App() {
     }
   };
 
+  console.log('DEBUG: App.tsx rendering - current session:', session, 'session.user:', session?.user);
   return (
     <Router>
       <div style={{ padding: '20px' }}>
         <h1>Central Ring UI</h1>
+        <nav style={{ marginBottom: '20px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+          <ul style={{ listStyle: 'none', padding: 0, display: 'flex', gap: '20px' }}>
+            <li><Link to="/">Home</Link></li>
+            <li><Link to="/marketplace">Marketplace</Link></li>
+          </ul>
+        </nav>
 
         <section>
           <h2>Authentication</h2>
@@ -384,7 +416,9 @@ function App() {
                   <section style={{ marginTop: '40px' }}>
                     <h2>Entities</h2>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-                      {entities.map((entity) => (
+                      {entities.map((entity) => {
+                        console.log('DEBUG: entity.attributes for', entity.id, ':', entity.attributes);
+                        return (
                         <div key={entity.id} style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px' }}>
                           <h3>{entity.name} (Type: {entity.typeId})</h3>
                           <p>Owner: {entity.ownerId}</p>
@@ -396,14 +430,14 @@ function App() {
                           </ul>
                           <Link to={`/entity/${entity.id}`} style={{ marginTop: '10px', display: 'block' }}>View Details</Link>
                         </div>
-                      ))}
+                      );})}
                     </div>
                   </section>
                 </>
               )}
             </>
           } />
-          <Route path="/entity/:id" element={<EntityDetail session={session} />} />
+          <Route path="/marketplace" element={<MarketplacePage session={session} />} />
         </Routes>
       </div>
     </Router>

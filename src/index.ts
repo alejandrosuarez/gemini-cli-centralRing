@@ -231,6 +231,70 @@ const entityTypes: EntityType[] = [
 ];
 const entities: Entity[] = [];
 
+// Helper function to process entity attributes for frontend display
+const processEntityForFrontend = async (entity: any) => {
+  let transformedEntity = { ...entity, typeId: entity.type_id };
+
+  // Fetch the associated EntityType to get predefined attributes
+  const { data: entityType, error: entityTypeError } = await supabaseServiceRole
+    .from('gemini_cli_entity_types')
+    .select('*')
+    .eq('id', transformedEntity.typeId)
+    .single();
+
+  if (entityTypeError) {
+    console.error(`Error fetching entity type for ${transformedEntity.typeId}:`, entityTypeError);
+    // Fallback to existing attributes if entity type cannot be fetched
+    transformedEntity.attributes = transformedEntity.attributes && typeof transformedEntity.attributes === 'object' && !Array.isArray(transformedEntity.attributes)
+      ? Object.keys(transformedEntity.attributes).map(key => ({
+          name: key,
+          value: transformedEntity.attributes[key],
+          type: typeof transformedEntity.attributes[key],
+          required: false,
+          isUserDefined: true,
+          notApplicable: false,
+        }))
+      : transformedEntity.attributes || [];
+    transformedEntity.attributes = transformedEntity.attributes.filter((attr: Attribute) => !attr.notApplicable);
+    return transformedEntity;
+  }
+
+  const predefinedAttributes = entityType?.predefined_attributes || [];
+  const existingAttributes = transformedEntity.attributes && typeof transformedEntity.attributes === 'object' && !Array.isArray(transformedEntity.attributes)
+    ? Object.keys(transformedEntity.attributes).map(key => ({
+        name: key,
+        value: transformedEntity.attributes[key],
+        type: typeof transformedEntity.attributes[key],
+        required: false,
+        isUserDefined: true,
+        notApplicable: false,
+      }))
+    : transformedEntity.attributes || [];
+
+  const mergedAttributes: Attribute[] = predefinedAttributes.map((predefinedAttr: Attribute) => {
+    const existingAttr = existingAttributes.find((attr: Attribute) => attr.name === predefinedAttr.name);
+    return {
+      ...predefinedAttr,
+      value: existingAttr ? existingAttr.value : undefined,
+      // Keep notApplicable from existingAttr if it exists, otherwise use predefined
+      notApplicable: existingAttr ? existingAttr.notApplicable : predefinedAttr.notApplicable,
+    };
+  });
+
+  // Add any user-defined attributes that are not part of predefined schema
+  existingAttributes.forEach((existingAttr: Attribute) => {
+    if (!mergedAttributes.some(attr => attr.name === existingAttr.name)) {
+      mergedAttributes.push(existingAttr);
+    }
+  });
+
+  // Filter out attributes marked as notApplicable
+  transformedEntity.attributes = mergedAttributes.filter((attr: Attribute) => !attr.notApplicable);
+  transformedEntity.entityType = entityType; // Attach entityType for frontend use
+
+  return transformedEntity;
+};
+
 // Routes for EntityType management
 app.post('/entity-types', protect, asyncHandler(async (req: Request, res: Response) => {
   const newEntityType: EntityType = req.body;
@@ -321,7 +385,10 @@ app.get('/entities', protect, asyncHandler(async (req: Request, res: Response) =
     console.error('Error fetching entities:', error);
     return res.status(500).json({ error: error.message });
   }
-  res.status(200).json(data);
+
+  const processedEntities = await Promise.all(data.map(processEntityForFrontend));
+
+  res.status(200).json(processedEntities);
 }));
 
 app.get('/entities/:id', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -343,25 +410,50 @@ app.get('/entities/:id', optionalAuth, asyncHandler(async (req: Request, res: Re
     return res.status(404).json({ error: 'Entity not found.' });
   }
 
-  // Fetch the associated EntityType
-  const { data: entityType, error: entityTypeError } = await supabaseServiceRole
-    .from('gemini_cli_entity_types')
-    .select('*')
-    .eq('id', entity.type_id) // Assuming type_id is the foreign key
-    .single();
+  const processedEntity = await processEntityForFrontend(entity);
 
-  if (entityTypeError) {
-    console.error(`Error fetching entity type for ${entity.type_id}:`, entityTypeError);
-    return res.status(500).json({ error: entityTypeError.message });
+  res.status(200).json(processedEntity);
+}));
+
+// Public Routes for Entity management (no authentication required)
+app.get('/public/entities', asyncHandler(async (req: Request, res: Response) => {
+  console.log('DEBUG: Fetching public entities.');
+  const { data, error } = await supabaseServiceRole
+    .from('gemini_cli_entities')
+    .select('*');
+
+  if (error) {
+    console.error('Error fetching public entities:', error);
+    return res.status(500).json({ error: error.message });
   }
 
-  // Combine entity and entityType data
-  const responseData = {
-    ...entity,
-    entityType: entityType // Add the full entity type object
-  };
+  const processedEntities = await Promise.all(data.map(processEntityForFrontend));
 
-  res.status(200).json(responseData);
+  res.status(200).json(processedEntities);
+}));
+
+app.get('/public/entities/:id', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  console.log(`Fetching public entity ${id}.`);
+
+  const { data: entity, error: entityError } = await supabaseServiceRole
+    .from('gemini_cli_entities')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (entityError) {
+    console.error(`Error fetching public entity ${id}:`, entityError);
+    return res.status(500).json({ error: entityError.message });
+  }
+
+  if (!entity) {
+    return res.status(404).json({ error: 'Entity not found.' });
+  }
+
+  const processedEntity = await processEntityForFrontend(entity);
+
+  res.status(200).json(processedEntity);
 }));
 
 app.post('/entities/:id/request-info', protect, asyncHandler(async (req: Request, res: Response) => {
@@ -433,15 +525,22 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     console.log(`DEBUG: Attempting to store OTP for ${email} in Supabase.`);
+    const otpData = { email, otp, expires_at: expiresAt.toISOString() };
+    console.log('DEBUG: Data to be upserted into otps table:', JSON.stringify(otpData, null, 2));
+
     // Store OTP in Supabase table
-    const { error: insertError } = await supabaseServiceRole
+    const { data: upsertData, error: insertError } = await supabaseServiceRole
       .from('otps')
-      .upsert({ email, otp, expires_at: expiresAt.toISOString() }, { onConflict: 'email' });
+      .upsert(otpData, { onConflict: 'email' })
+      .select();
 
     if (insertError) {
-      console.error('DEBUG: Error storing OTP in Supabase:', insertError);
+      console.error('DEBUG: Full error object from Supabase upsert:', JSON.stringify(insertError, null, 2));
+      console.error('DEBUG: Error storing OTP in Supabase:', insertError.message);
       return res.status(500).json({ error: 'Failed to store OTP.' });
     }
+
+    console.log('DEBUG: Supabase upsert successful. Returned data:', JSON.stringify(upsertData, null, 2));
     console.log(`DEBUG: OTP for ${email} stored successfully. Attempting to send email via Resend.`);
 
     await resend.emails.send({
@@ -509,11 +608,10 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
       // User exists but dummy password doesn't match, update password via service role and try again
       console.log('DEBUG: User exists but dummy password mismatch, attempting to update password via service role.');
 
-      const { data: existingUser, error: findUserError } = await supabaseServiceRole.auth.admin.listUsers({
-        q: email,
-      });
+      const { data, error: findUserError } = await supabaseServiceRole.auth.admin.listUsers();
+      const existingUser = (data as any)?.users.find((user: User) => user.email === email);
 
-      if (findUserError || !existingUser || existingUser.users.length === 0) {
+      if (findUserError || !existingUser) {
         console.error('DEBUG: Error finding existing user by email for password reset:', findUserError);
         // If user not found, proceed with signup as fallback
         const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
@@ -524,7 +622,7 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
         userSession = signUpData.session;
         user = signUpData.user;
       } else {
-        const userIdToUpdate = existingUser.users[0].id;
+        const userIdToUpdate = existingUser.id;
         const { data: userData, error: updateUserError } = await supabaseServiceRole.auth.admin.updateUserById(
           userIdToUpdate,
           { password: dummyPassword }
@@ -575,6 +673,7 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
   }
 }));
 
+console.log(`Attempting to start Central Ring API server on port ${port}...`);
 app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Central Ring API server is running and listening on http://localhost:${port}`);
 });

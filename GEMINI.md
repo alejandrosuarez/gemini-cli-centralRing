@@ -80,6 +80,7 @@ The authentication flow is a custom OTP (One-Time Password) system, *not* relyin
 SELECT * FROM gemini_cli_entities  
 WHERE attributes @? '$.engine ? (@ == "V8")'  
 ```
+  +++ *Attribute Handling Note:* The `attributes` column is `jsonb`. Backend ensures it's returned as an array of `Attribute` objects to the frontend, even if stored as an object, by transforming key-value pairs into `[{name: key, value: value, ...}]` format.  
 
 - **`otps`**:  
   +++ *Vacuum Strategy:* `DELETE FROM otps WHERE expires_at < NOW() - INTERVAL '1 day'`  
@@ -105,6 +106,7 @@ WHERE attributes @? '$.engine ? (@ == "V8")'
 | CORS 404              | `curl -X OPTIONS $URL -v`          |  
 | OTP Stuck             | `SELECT pg_notify('otp_alert', email)` |  
 | RLS Block             | `SET LOCAL request.jwt.claims TO '{"sub":"force_user"}'` |  
+| Supabase Admin API User Lookup | `supabaseServiceRole.auth.admin.listUsers()` may require casting to `any` and in-memory filtering due to SDK type limitations. |
 ```
 
 +++ **📌 Supabase CLI Tricks:**  
