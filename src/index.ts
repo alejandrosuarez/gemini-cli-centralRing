@@ -242,6 +242,30 @@ app.get('/entities', protect, asyncHandler(async (req: Request, res: Response) =
   res.status(200).json(data);
 }));
 
+app.get('/entities/:id', protect, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const ownerId = req.user.id;
+  console.log(`Fetching entity ${id} for owner: ${ownerId}`);
+
+  const { data, error } = await req.supabase
+    .from('gemini_cli_entities')
+    .select('*')
+    .eq('id', id)
+    .eq('owner_id', ownerId)
+    .single();
+
+  if (error) {
+    console.error(`Error fetching entity ${id}:`, error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  if (!data) {
+    return res.status(404).json({ error: 'Entity not found.' });
+  }
+
+  res.status(200).json(data);
+}));
+
 // Auth Endpoints
 app.options('/auth/send-otp', cors()); // Preflight for send-otp
 app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
