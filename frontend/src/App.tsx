@@ -78,11 +78,11 @@ function App() {
       if (type) {
         setNewEntity(prev => ({
           ...prev,
-          attributes: prev.attributes?.map(attr => ({
+          attributes: type.predefinedAttributes.map(attr => ({
             ...attr,
             value: attr.defaultValue || undefined,
             notApplicable: false,
-          })) || [],
+          })),
         }));
       }
     }

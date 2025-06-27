@@ -265,22 +265,40 @@ app.get('/entities/:id', optionalAuth, asyncHandler(async (req: Request, res: Re
   const { id } = req.params;
   console.log(`Fetching entity ${id} (optional auth).`);
 
-  const { data, error } = await supabaseServiceRole
+  const { data: entity, error: entityError } = await supabaseServiceRole
     .from('gemini_cli_entities')
     .select('*')
     .eq('id', id)
     .single();
 
-  if (error) {
-    console.error(`Error fetching entity ${id}:`, error);
-    return res.status(500).json({ error: error.message });
+  if (entityError) {
+    console.error(`Error fetching entity ${id}:`, entityError);
+    return res.status(500).json({ error: entityError.message });
   }
 
-  if (!data) {
+  if (!entity) {
     return res.status(404).json({ error: 'Entity not found.' });
   }
 
-  res.status(200).json(data);
+  // Fetch the associated EntityType
+  const { data: entityType, error: entityTypeError } = await supabaseServiceRole
+    .from('gemini_cli_entity_types')
+    .select('*')
+    .eq('id', entity.type_id) // Assuming type_id is the foreign key
+    .single();
+
+  if (entityTypeError) {
+    console.error(`Error fetching entity type for ${entity.type_id}:`, entityTypeError);
+    return res.status(500).json({ error: entityTypeError.message });
+  }
+
+  // Combine entity and entityType data
+  const responseData = {
+    ...entity,
+    entityType: entityType // Add the full entity type object
+  };
+
+  res.status(200).json(responseData);
 }));
 
 app.post('/entities/:id/request-info', protect, asyncHandler(async (req: Request, res: Response) => {
