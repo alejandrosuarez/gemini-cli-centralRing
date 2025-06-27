@@ -500,16 +500,15 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     const dummyPassword = `${email}_central_ring_dummy_password`; // Consistent dummy password per email
 
     // Attempt to sign in with password
-    let { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
+    let { data: initialSignInData, error: initialSignInError } = await supabaseAuth.auth.signInWithPassword({
       email,
       password: dummyPassword,
     });
 
-    if (signInError && signInError.message.includes('Invalid login credentials')) {
+    if (initialSignInError && initialSignInError.message.includes('Invalid login credentials')) {
       // User exists but dummy password doesn't match, update password via service role and try again
       console.log('DEBUG: User exists but dummy password mismatch, attempting to update password via service role.');
 
-      // Find the user by email to get their ID for updateUserById
       const { data: existingUser, error: findUserError } = await supabaseServiceRole.auth.admin.listUsers({
         email: email,
       });
@@ -522,7 +521,8 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
           password: dummyPassword,
         });
         if (signUpError) throw signUpError;
-        signInData = signUpData; // Use data from successful signup
+        userSession = signUpData.session;
+        user = signUpData.user;
       } else {
         const userIdToUpdate = existingUser.users[0].id;
         const { data: userData, error: updateUserError } = await supabaseServiceRole.auth.admin.updateUserById(
@@ -541,10 +541,11 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
             password: dummyPassword,
           });
           if (retrySignInError) throw retrySignInError;
-          signInData = retrySignInData; // Use data from successful retry
+          userSession = retrySignInData.session;
+          user = retrySignInData.user;
         }
       }
-    } else if (signInError && signInError.message.includes('User not found')) {
+    } else if (initialSignInError && initialSignInError.message.includes('User not found')) {
       // User does not exist, proceed with sign up
       console.log('DEBUG: User not found via signInWithPassword, attempting to sign up.');
       const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
@@ -552,15 +553,15 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
         password: dummyPassword,
       });
       if (signUpError) throw signUpError;
-      signInData = signUpData; // Use data from successful signup
-    } else if (signInError) {
-      // Other signInError
-      throw signInError;
-    }
-
-    if (signInData.session) {
-      userSession = signInData.session;
-      user = signInData.user;
+      userSession = signUpData.session;
+      user = signUpData.user;
+    } else if (initialSignInError) {
+      // Other initialSignInError
+      throw initialSignInError;
+    } else {
+      // Initial sign-in was successful
+      userSession = initialSignInData.session;
+      user = initialSignInData.user;
     }
 
     if (!userSession || !user) {
