@@ -43,6 +43,9 @@ const supabaseServiceRole: SupabaseClient = createClient(supabaseUrl, supabaseSe
 
 const resend = new Resend(resendApiKey);
 
+// Temporary in-memory OTP store (moved to global scope)
+const otpStore: Record<string, { otp: string; expiresAt: Date }> = {};
+
 app.use(express.json());
 app.use(cors()); // Enable CORS for all routes
 
@@ -250,14 +253,20 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email is required.' });
   }
 
+  const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
+  const expiresAt = new Date(Date.now() + 60 * 1000); // OTP valid for 1 minute (60 seconds)
+  otpStore[email] = { otp, expiresAt };
+
   try {
-    const { data, error } = await supabaseAuth.auth.signInWithOtp({ email });
-
-    if (error) throw error;
-
+    await resend.emails.send({
+      from: resendEmailFrom, // Use the new environment variable here
+      to: email,
+      subject: 'Your OTP for Central Ring',
+      html: `<p>Your One-Time Password (OTP) is: <strong>${otp}</strong></p><p>This OTP is valid for 1 minute.</p>`,
+    });
     return res.status(200).json({ message: 'OTP sent to email.' });
   } catch (error: any) {
-    console.error('Error sending OTP via Supabase:', error);
+    console.error('Error sending OTP via Resend:', error);
     return res.status(500).json({ error: 'Failed to send OTP email.' });
   }
 }));
@@ -269,22 +278,49 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     return res.status(400).json({ error: 'Email and token are required.' });
   }
 
+  const storedOtp = otpStore[email];
+
+  if (!storedOtp || storedOtp.otp !== token || storedOtp.expiresAt < new Date()) {
+    return res.status(400).json({ error: 'Invalid or expired OTP.' });
+  }
+
+  delete otpStore[email]; // OTP consumed
+
   let userSession: Session | null = null;
   let user: User | null = null;
 
   try {
-    const { data: verifyOtpData, error: verifyOtpError } = await supabaseAuth.auth.verifyOtp({
-      email,
-      token,
-      type: 'email',
-    });
+    const dummyPassword = 'a_strong_dummy_password_123'; // This should be consistent
 
-    if (verifyOtpError) {
-      console.error('DEBUG: Supabase verifyOtp error:', verifyOtpError);
-      throw verifyOtpError;
+    // Attempt to sign in with OTP (passwordless login for existing users)
+    const { data: signInOtpData, error: signInOtpError } = await supabaseAuth.auth.signInWithOtp({ email });
+
+    if (signInOtpData) {
+      // If signInOtpData is not null, it means an OTP was sent or user exists
+      // Now verify the OTP to get the session
+      const { data: verifyOtpData, error: verifyOtpError } = await supabaseAuth.auth.verifyOtp({
+        email,
+        token,
+        type: 'email',
+      });
+
+      if (verifyOtpError) throw verifyOtpError;
+      userSession = verifyOtpData.session;
+      user = verifyOtpData.user;
+    } else if (signInOtpError && signInOtpError.message.includes('User not found')) {
+      // User does not exist, try to sign up with a dummy password
+      console.log('User not found via signInWithOtp, attempting to sign up.');
+      const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
+        email,
+        password: dummyPassword,
+      });
+      if (signUpError) throw signUpError;
+      userSession = signUpData.session;
+      user = signUpData.user;
+    } else if (signInOtpError) {
+      // Other signInOtp error (e.g., magic link sent instead of OTP)
+      throw signInOtpError;
     }
-    userSession = verifyOtpData.session;
-    user = verifyOtpData.user;
 
     if (!userSession || !user) {
       throw new Error('Failed to create user session after OTP verification.');
