@@ -86,8 +86,8 @@ const protect = asyncHandler(async (req: Request, res: Response, next: NextFunct
 
   // Try Supabase validation first
   try {
-    const { data: supabaseUser, error: supabaseError } = await supabaseAuth.auth.getUser(token);
-    if (supabaseUser) {
+    const { data: { user: supabaseUser }, error: supabaseError } = await supabaseAuth.auth.getUser(token);
+    if (supabaseUser && supabaseUser.id) {
       user = supabaseUser;
       req.supabase = createClient(supabaseUrl, supabaseAnonKey, {
         global: {
@@ -96,7 +96,7 @@ const protect = asyncHandler(async (req: Request, res: Response, next: NextFunct
       });
       console.log('DEBUG: Authenticated via Supabase. User ID:', user.id);
     } else {
-      authError = supabaseError;
+      authError = supabaseError || new Error('Supabase user or user ID is undefined.');
       console.warn('DEBUG: Supabase validation failed:', authError?.message);
     }
   } catch (e: any) {
