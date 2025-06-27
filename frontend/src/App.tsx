@@ -234,42 +234,6 @@ function App() {
           )}
         </section>
 
-        <section>
-          <h2>Authentication</h2>
-          {!session ? (
-            <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
-              <input
-                type="email"
-                placeholder="Your Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <button type="submit">Send OTP</button>
-              {message && <p>{message}</p>}
-            </form>
-          ) : (
-            <div>
-              <p>Logged in as: {session.user.email}</p>
-              <button onClick={handleLogout}>Logout</button>
-              {message && <p>{message}</p>}
-            </div>
-          )}
-
-          {message.includes('OTP sent') && !session && (
-            <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px', marginTop: '20px' }}>
-              <input
-                type="text"
-                placeholder="Enter OTP"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                required
-              />
-              <button type="submit">Verify OTP</button>
-            </form>
-          )}
-        </section>
-
         <Routes>
           <Route path="/" element={
             <>
