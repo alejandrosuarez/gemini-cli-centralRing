@@ -510,7 +510,7 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
       console.log('DEBUG: User exists but dummy password mismatch, attempting to update password via service role.');
 
       const { data: existingUser, error: findUserError } = await supabaseServiceRole.auth.admin.listUsers({
-        email: email,
+        q: email,
       });
 
       if (findUserError || !existingUser || existingUser.users.length === 0) {
