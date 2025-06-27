@@ -321,24 +321,18 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
   try {
     const dummyPassword = 'a_strong_dummy_password_123'; // This should be consistent
 
-    // Attempt to sign in with OTP (passwordless login for existing users)
-    const { data: signInOtpData, error: signInOtpError } = await supabaseAuth.auth.signInWithOtp({ email });
+    // Attempt to sign in with password
+    const { data: signInData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
+      email,
+      password: dummyPassword,
+    });
 
-    if (signInOtpData) {
-      // If signInOtpData is not null, it means an OTP was sent or user exists
-      // Now verify the OTP to get the session
-      const { data: verifyOtpData, error: verifyOtpError } = await supabaseAuth.auth.verifyOtp({
-        email,
-        token,
-        type: 'email',
-      });
-
-      if (verifyOtpError) throw verifyOtpError;
-      userSession = verifyOtpData.session;
-      user = verifyOtpData.user;
-    } else if (signInOtpError && signInOtpError.message.includes('User not found')) {
+    if (signInData.session) {
+      userSession = signInData.session;
+      user = signInData.user;
+    } else if (signInError && signInError.message.includes('Invalid login credentials')) {
       // User does not exist, try to sign up with a dummy password
-      console.log('User not found via signInWithOtp, attempting to sign up.');
+      console.log('User not found via signInWithPassword, attempting to sign up.');
       const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
         email,
         password: dummyPassword,
@@ -346,9 +340,8 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
       if (signUpError) throw signUpError;
       userSession = signUpData.session;
       user = signUpData.user;
-    } else if (signInOtpError) {
-      // Other signInOtp error (e.g., magic link sent instead of OTP)
-      throw signInOtpError;
+    } else if (signInError) {
+      throw signInError;
     }
 
     if (!userSession || !user) {
