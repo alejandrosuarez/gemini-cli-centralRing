@@ -128,7 +128,11 @@ function App() {
 
   const fetchEntities = async () => {
     try {
-      const response = await axios.get<Entity[]>(`${API_BASE_URL}/entities`);
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+      const response = await axios.get<Entity[]>(`${API_BASE_URL}/entities`, { headers });
       setEntities(response.data);
     } catch (error: unknown) {
       console.error('Error fetching entities:', error);
