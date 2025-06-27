@@ -561,10 +561,6 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     return res.status(500).json({ error: error.message });
   }
 }));
-    console.error('Error during Supabase authentication:', error.message);
-    return res.status(500).json({ error: error.message });
-  }
-}));
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
