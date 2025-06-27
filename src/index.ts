@@ -274,13 +274,16 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
 app.options('/auth/verify-otp', cors()); // Preflight for verify-otp
 app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) => {
   const { email, token } = req.body;
+  console.log(`DEBUG: verify-otp received email: ${email}, token: ${token}`);
   if (!email || !token) {
     return res.status(400).json({ error: 'Email and token are required.' });
   }
 
   const storedOtp = otpStore[email];
+  console.log(`DEBUG: verify-otp storedOtp for ${email}:`, storedOtp);
 
   if (!storedOtp || storedOtp.otp !== token || storedOtp.expiresAt < new Date()) {
+    console.log(`DEBUG: verify-otp failed otpStore check. Stored: ${JSON.stringify(storedOtp)}, Received: ${token}`);
     return res.status(400).json({ error: 'Invalid or expired OTP.' });
   }
 
@@ -296,7 +299,10 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
       type: 'email',
     });
 
-    if (verifyOtpError) throw verifyOtpError;
+    if (verifyOtpError) {
+      console.error('DEBUG: Supabase verifyOtp error:', verifyOtpError);
+      throw verifyOtpError;
+    }
     userSession = verifyOtpData.session;
     user = verifyOtpData.user;
 
