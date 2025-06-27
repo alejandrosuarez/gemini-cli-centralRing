@@ -254,15 +254,17 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
   const expiresAt = new Date(Date.now() + 60 * 1000); // OTP valid for 1 minute (60 seconds)
 
   try {
+    console.log(`DEBUG: Attempting to store OTP for ${email} in Supabase.`);
     // Store OTP in Supabase table
     const { error: insertError } = await supabaseServiceRole
       .from('otps')
       .upsert({ email, otp, expires_at: expiresAt.toISOString() }, { onConflict: 'email' });
 
     if (insertError) {
-      console.error('Error storing OTP in Supabase:', insertError);
+      console.error('DEBUG: Error storing OTP in Supabase:', insertError);
       return res.status(500).json({ error: 'Failed to store OTP.' });
     }
+    console.log(`DEBUG: OTP for ${email} stored successfully. Attempting to send email via Resend.`);
 
     await resend.emails.send({
       from: resendEmailFrom, // Use the new environment variable here
@@ -270,6 +272,7 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
       subject: 'Your OTP for Central Ring',
       html: `<p>Your One-Time Password (OTP) is: <strong>${otp}</strong></p><p>This OTP is valid for 1 minute.</p>`,
     });
+    console.log(`DEBUG: OTP email sent to ${email} successfully.`);
     return res.status(200).json({ message: 'OTP sent to email.' });
   } catch (error: any) {
     console.error('Error sending OTP via Resend:', error);
