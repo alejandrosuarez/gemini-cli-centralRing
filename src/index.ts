@@ -43,9 +43,6 @@ const supabaseServiceRole: SupabaseClient = createClient(supabaseUrl, supabaseSe
 
 const resend = new Resend(resendApiKey);
 
-// Temporary in-memory OTP store (moved to global scope)
-const otpStore: Record<string, { otp: string; expiresAt: Date }> = {};
-
 app.use(express.json());
 app.use(cors()); // Enable CORS for all routes
 
@@ -255,9 +252,18 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
   const expiresAt = new Date(Date.now() + 60 * 1000); // OTP valid for 1 minute (60 seconds)
-  otpStore[email] = { otp, expiresAt };
 
   try {
+    // Store OTP in Supabase table
+    const { error: insertError } = await supabaseServiceRole
+      .from('otps')
+      .upsert({ email, otp, expires_at: expiresAt.toISOString() }, { onConflict: 'email' });
+
+    if (insertError) {
+      console.error('Error storing OTP in Supabase:', insertError);
+      return res.status(500).json({ error: 'Failed to store OTP.' });
+    }
+
     await resend.emails.send({
       from: resendEmailFrom, // Use the new environment variable here
       to: email,
@@ -278,13 +284,33 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     return res.status(400).json({ error: 'Email and token are required.' });
   }
 
-  const storedOtp = otpStore[email];
+  // Retrieve OTP from Supabase table
+  const { data: storedOtpData, error: fetchError } = await supabaseServiceRole
+    .from('otps')
+    .select('otp, expires_at')
+    .eq('email', email)
+    .single();
 
-  if (!storedOtp || storedOtp.otp !== token || storedOtp.expiresAt < new Date()) {
+  if (fetchError || !storedOtpData) {
+    console.error('Error fetching OTP from Supabase or OTP not found:', fetchError);
     return res.status(400).json({ error: 'Invalid or expired OTP.' });
   }
 
-  delete otpStore[email]; // OTP consumed
+  const storedOtp = storedOtpData.otp;
+  const expiresAt = new Date(storedOtpData.expires_at);
+
+  if (storedOtp !== token || expiresAt < new Date()) {
+    // Optionally delete expired/invalid OTPs here
+    await supabaseServiceRole.from('otps').delete().eq('email', email);
+    return res.status(400).json({ error: 'Invalid or expired OTP.' });
+  }
+
+  // OTP is valid, delete it from the table
+  const { error: deleteError } = await supabaseServiceRole.from('otps').delete().eq('email', email);
+  if (deleteError) {
+    console.error('Error deleting OTP from Supabase:', deleteError);
+    // Continue, as the main goal is verification
+  }
 
   let userSession: Session | null = null;
   let user: User | null = null;
