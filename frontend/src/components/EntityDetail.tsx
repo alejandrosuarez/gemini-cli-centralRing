@@ -102,13 +102,10 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
       <p><strong>ID:</strong> {entity.id}</p>
       <p><strong>Type:</strong> {entity.entityType?.name || entity.typeId}</p>
       {entity.entityType?.description && <p><strong>Type Description:</strong> {entity.entityType.description}</p>}
-      <p><strong>Owner:</strong> {entity.ownerId}</p>
-      <p><strong>Created At:</strong> {new Date(entity.createdAt).toLocaleString()}</p>
-      <p><strong>Updated At:</strong> {new Date(entity.updatedAt).toLocaleString()}</p>
 
       <h3>Attributes:</h3>
       <ul>
-        {entity.attributes.map((attr: any) => (
+        {entity.attributes?.map((attr: any) => (
           <li key={attr.name}>
             <strong>{attr.name}:</strong> {attr.notApplicable ? '(N/A)' : JSON.stringify(attr.value)}
           </li>
@@ -119,7 +116,7 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
       {session && (
         <div style={{ marginTop: '20px', borderTop: '1px solid #eee', paddingTop: '15px' }}>
           <h3>Interaction Options:</h3>
-          {!isOwner && entity.entityType && (
+          {!isOwner && entity.entityType?.predefinedAttributes && (
             <div style={{ marginBottom: '15px' }}>
               <h4>Request Missing Info / Add Message:</h4>
               {entity.entityType.predefinedAttributes.length > 0 && (
