@@ -43,9 +43,6 @@ const supabaseServiceRole: SupabaseClient = createClient(supabaseUrl, supabaseSe
 
 const resend = new Resend(resendApiKey);
 
-// Temporary in-memory OTP store (moved to global scope)
-const otpStore: Record<string, { otp: string; expiresAt: Date }> = {};
-
 app.use(express.json());
 app.use(cors()); // Enable CORS for all routes
 
@@ -253,20 +250,14 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Email is required.' });
   }
 
-  const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
-  const expiresAt = new Date(Date.now() + 60 * 1000); // OTP valid for 1 minute (60 seconds)
-  otpStore[email] = { otp, expiresAt };
-
   try {
-    await resend.emails.send({
-      from: resendEmailFrom, // Use the new environment variable here
-      to: email,
-      subject: 'Your OTP for Central Ring',
-      html: `<p>Your One-Time Password (OTP) is: <strong>${otp}</strong></p><p>This OTP is valid for 5 minutes.</p>`,
-    });
+    const { data, error } = await supabaseAuth.auth.signInWithOtp({ email });
+
+    if (error) throw error;
+
     return res.status(200).json({ message: 'OTP sent to email.' });
   } catch (error: any) {
-    console.error('Error sending OTP via Resend:', error);
+    console.error('Error sending OTP via Supabase:', error);
     return res.status(500).json({ error: 'Failed to send OTP email.' });
   }
 }));
@@ -274,20 +265,9 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
 app.options('/auth/verify-otp', cors()); // Preflight for verify-otp
 app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) => {
   const { email, token } = req.body;
-  console.log(`DEBUG: verify-otp received email: ${email}, token: ${token}`);
   if (!email || !token) {
     return res.status(400).json({ error: 'Email and token are required.' });
   }
-
-  const storedOtp = otpStore[email];
-  console.log(`DEBUG: verify-otp storedOtp for ${email}:`, storedOtp);
-
-  if (!storedOtp || storedOtp.otp !== token || storedOtp.expiresAt < new Date()) {
-    console.log(`DEBUG: verify-otp failed otpStore check. Stored: ${JSON.stringify(storedOtp)}, Received: ${token}`);
-    return res.status(400).json({ error: 'Invalid or expired OTP.' });
-  }
-
-  delete otpStore[email]; // OTP consumed
 
   let userSession: Session | null = null;
   let user: User | null = null;
