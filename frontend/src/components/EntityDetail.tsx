@@ -11,6 +11,7 @@ interface EntityDetailProps {
 export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
   const { id } = useParams<{ id: string }>();
   const [entity, setEntity] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [requestMessage, setRequestMessage] = useState<string>('');
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
