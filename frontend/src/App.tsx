@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { EntityDetail } from './components/EntityDetail';
 
 export interface Attribute {
   name: string;
@@ -77,11 +78,11 @@ function App() {
       if (type) {
         setNewEntity(prev => ({
           ...prev,
-          attributes: type.predefinedAttributes.map(attr => ({
+          attributes: prev.attributes?.map(attr => ({
             ...attr,
             value: attr.defaultValue || undefined,
             notApplicable: false,
-          })),
+          })) || [],
         }));
       }
     }

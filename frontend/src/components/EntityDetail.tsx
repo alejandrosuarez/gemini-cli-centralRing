@@ -8,7 +8,7 @@ interface EntityDetailProps {
   session: any; // Pass the session object to determine auth status and ownership
 }
 
-const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
+export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
   const { id } = useParams<{ id: string }>();
   const [entity, setEntity] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
