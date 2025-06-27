@@ -246,6 +246,7 @@ app.get('/entities', protect, asyncHandler(async (req: Request, res: Response) =
 }));
 
 // Auth Endpoints
+app.options('/auth/send-otp', cors()); // Preflight for send-otp
 app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
   const { email } = req.body;
   if (!email) {
@@ -270,6 +271,7 @@ app.post('/auth/send-otp', asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
+app.options('/auth/verify-otp', cors()); // Preflight for verify-otp
 app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) => {
   const { email, token } = req.body;
   if (!email || !token) {
