@@ -12,7 +12,7 @@ const port = process.env.PORT || 3000;
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // New variable
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim(); // New variable
 const resendApiKey = process.env.RESEND_API_KEY;
 const resendEmailFrom = process.env.YOUR_RESEND_EMAIL_FROM; // New variable
 
