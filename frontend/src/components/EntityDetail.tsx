@@ -11,10 +11,10 @@ interface EntityDetailProps {
 export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
   const { id } = useParams<{ id: string }>();
   const [entity, setEntity] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [requestMessage, setRequestMessage] = useState<string>('');
   const [requestStatus, setRequestStatus] = useState<string | null>(null);
+  const [selectedAttributesToRequest, setSelectedAttributesToRequest] = useState<string[]>([]);
 
   const fetchEntity = async () => {
     try {
@@ -26,6 +26,10 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
       }
       const response = await axios.get(`${API_BASE_URL}/entities/${id}`, { headers });
       setEntity(response.data);
+      // Initialize selectedAttributesToRequest with missingInfoAttributes if any
+      if (response.data.missingInfoAttributes) {
+        setSelectedAttributesToRequest(response.data.missingInfoAttributes);
+      }
     } catch (err: any) {
       console.error('Error fetching entity:', err);
       setError(`Failed to load entity: ${err.response?.data?.error || err.message}`);
@@ -45,19 +49,35 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
       setRequestStatus('Please log in to request information.');
       return;
     }
+    if (selectedAttributesToRequest.length === 0 && !requestMessage) {
+      setRequestStatus('Please select at least one attribute or provide a message.');
+      return;
+    }
     try {
       setRequestStatus('Sending request...');
       const headers: Record<string, string> = {
         'Authorization': `Bearer ${session.access_token}`,
       };
-      await axios.post(`${API_BASE_URL}/entities/${id}/request-info`, { message: requestMessage }, { headers });
+      await axios.post(`${API_BASE_URL}/entities/${id}/request-info`, {
+        message: requestMessage,
+        attributeNames: selectedAttributesToRequest,
+      }, { headers });
       setRequestStatus('Information request sent successfully!');
       setRequestMessage(''); // Clear message after sending
+      setSelectedAttributesToRequest([]); // Clear selected attributes
       fetchEntity(); // Re-fetch entity to update owner view
     } catch (err: any) {
       console.error('Error sending request:', err);
       setRequestStatus(`Failed to send request: ${err.response?.data?.error || err.message}`);
     }
+  };
+
+  const handleAttributeCheckboxChange = (attributeName: string) => {
+    setSelectedAttributesToRequest(prev =>
+      prev.includes(attributeName)
+        ? prev.filter(name => name !== attributeName)
+        : [...prev, attributeName]
+    );
   };
 
   if (loading) {
@@ -100,6 +120,21 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
           {!isOwner && (
             <div style={{ marginBottom: '15px' }}>
               <h4>Request Missing Info / Add Message:</h4>
+              {entity.missingInfoAttributes && entity.missingInfoAttributes.length > 0 && (
+                <div style={{ marginBottom: '10px' }}>
+                  <p>Select attributes to request:</p>
+                  {entity.missingInfoAttributes.map((attrName: string) => (
+                    <label key={attrName} style={{ display: 'block' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedAttributesToRequest.includes(attrName)}
+                        onChange={() => handleAttributeCheckboxChange(attrName)}
+                      />
+                      {attrName}
+                    </label>
+                  ))}
+                </div>
+              )}
               <textarea
                 placeholder="Enter your request for missing information or a custom message..."
                 rows={4}
@@ -136,6 +171,9 @@ export const EntityDetail: React.FC<EntityDetailProps> = ({ session }) => {
                       <li key={index}>
                         <strong>{new Date(log.timestamp).toLocaleString()}:</strong> {log.action} by {log.userId}
                         {log.details?.message && ` - Message: "${log.details.message}"`}
+                        {log.details?.attributeNames && log.details.attributeNames.length > 0 && (
+                          ` (Attributes requested: ${log.details.attributeNames.join(', ')})`
+                        )}
                       </li>
                     ))}
                   </ul>
