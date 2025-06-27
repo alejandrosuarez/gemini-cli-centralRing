@@ -131,6 +131,9 @@ function App() {
       const headers: Record<string, string> = {};
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`;
+        console.log('DEBUG: fetchEntities - Using access token:', session.access_token);
+      } else {
+        console.log('DEBUG: fetchEntities - No access token available.');
       }
       const response = await axios.get<Entity[]>(`${API_BASE_URL}/entities`, { headers });
       setEntities(response.data);
