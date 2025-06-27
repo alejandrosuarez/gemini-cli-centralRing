@@ -509,11 +509,14 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
       // User exists but dummy password doesn't match, update password via service role and try again
       console.log('DEBUG: User exists but dummy password mismatch, attempting to update password via service role.');
 
-      // First, get the user by email to ensure we have their ID
-      const { data: existingUserData, error: getExistingUserError } = await supabaseServiceRole.auth.admin.getUserByEmail(email);
-      if (getExistingUserError || !existingUserData?.user) {
-        console.error('DEBUG: Error getting existing user by email:', getExistingUserError);
-        // If we can't get the user, treat as new user and try signup
+      // Find the user by email to get their ID for updateUserById
+      const { data: existingUser, error: findUserError } = await supabaseServiceRole.auth.admin.listUsers({
+        email: email,
+      });
+
+      if (findUserError || !existingUser || existingUser.users.length === 0) {
+        console.error('DEBUG: Error finding existing user by email for password reset:', findUserError);
+        // If user not found, proceed with signup as fallback
         const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
           email,
           password: dummyPassword,
@@ -521,9 +524,9 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
         if (signUpError) throw signUpError;
         signInData = signUpData; // Use data from successful signup
       } else {
-        // User found, update their password
+        const userIdToUpdate = existingUser.users[0].id;
         const { data: userData, error: updateUserError } = await supabaseServiceRole.auth.admin.updateUserById(
-          existingUserData.user.id,
+          userIdToUpdate,
           { password: dummyPassword }
         );
 
