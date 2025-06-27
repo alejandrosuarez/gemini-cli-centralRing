@@ -508,14 +508,12 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
     if (signInError && signInError.message.includes('Invalid login credentials')) {
       // User exists but dummy password doesn't match, update password via service role and try again
       console.log('DEBUG: User exists but dummy password mismatch, attempting to update password via service role.');
-      const { data: userData, error: updateUserError } = await supabaseServiceRole.auth.admin.updateUserById(
-        signInError.user?.id || '', // Use user ID from error if available, otherwise try to find by email
-        { password: dummyPassword }
-      );
 
-      if (updateUserError) {
-        console.error('DEBUG: Error updating user password via service role:', updateUserError);
-        // If update fails, it might be a new user or other issue, try signup as fallback
+      // First, get the user by email to ensure we have their ID
+      const { data: existingUserData, error: getExistingUserError } = await supabaseServiceRole.auth.admin.getUserByEmail(email);
+      if (getExistingUserError || !existingUserData?.user) {
+        console.error('DEBUG: Error getting existing user by email:', getExistingUserError);
+        // If we can't get the user, treat as new user and try signup
         const { data: signUpData, error: signUpError } = await supabaseAuth.auth.signUp({
           email,
           password: dummyPassword,
@@ -523,14 +521,25 @@ app.post('/auth/verify-otp', asyncHandler(async (req: Request, res: Response) =>
         if (signUpError) throw signUpError;
         signInData = signUpData; // Use data from successful signup
       } else {
-        // Password updated, try signing in again
-        console.log('DEBUG: Password updated via service role, retrying sign in.');
-        const { data: retrySignInData, error: retrySignInError } = await supabaseAuth.auth.signInWithPassword({
-          email,
-          password: dummyPassword,
-        });
-        if (retrySignInError) throw retrySignInError;
-        signInData = retrySignInData; // Use data from successful retry
+        // User found, update their password
+        const { data: userData, error: updateUserError } = await supabaseServiceRole.auth.admin.updateUserById(
+          existingUserData.user.id,
+          { password: dummyPassword }
+        );
+
+        if (updateUserError) {
+          console.error('DEBUG: Error updating user password via service role:', updateUserError);
+          throw updateUserError; // Re-throw if password update fails
+        } else {
+          // Password updated, try signing in again
+          console.log('DEBUG: Password updated via service role, retrying sign in.');
+          const { data: retrySignInData, error: retrySignInError } = await supabaseAuth.auth.signInWithPassword({
+            email,
+            password: dummyPassword,
+          });
+          if (retrySignInError) throw retrySignInError;
+          signInData = retrySignInData; // Use data from successful retry
+        }
       }
     } else if (signInError && signInError.message.includes('User not found')) {
       // User does not exist, proceed with sign up
