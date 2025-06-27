@@ -233,158 +233,196 @@ function App() {
           )}
         </section>
 
-        {session && (
-          <Routes>
-            <Route path="/" element={
-              <>
-                <section style={{ marginTop: '40px' }}>
-                  <h2>Add New Entity Type</h2>
-                  <form onSubmit={handleAddEntityType} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
-                    <input
-                      type="text"
-                      placeholder="ID (e.g., product)"
-                      value={newEntityType.id}
-                      onChange={(e) => setNewEntityType({ ...newEntityType, id: e.target.value })}
-                      required
-                    />
-                    <input
-                      type="text"
-                      placeholder="Name (e.g., Product)"
-                      value={newEntityType.name}
-                      onChange={(e) => setNewEntityType({ ...newEntityType, name: e.target.value })}
-                      required
-                    />
-                    <textarea
-                      placeholder={"Predefined Attributes (JSON array, e.g., [{ \"name\": \"color\", \"type\": \"string\", \"required\": false, \"isUserDefined\": false }])"}
-                      value={JSON.stringify(newEntityType.predefinedAttributes)}
-                      onChange={(e) => {
-                        try {
-                          setNewEntityType({ ...newEntityType, predefinedAttributes: JSON.parse(e.target.value) });
-                        } catch (error) {
-                          console.error("Invalid JSON for attributes", error);
-                        }
-                      }}
-                      rows={5}
-                      style={{ width: '100%' }}
-                    />
-                    <button type="submit">Add Entity Type</button>
-                  </form>
-                </section>
+        <section>
+          <h2>Authentication</h2>
+          {!session ? (
+            <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
+              <input
+                type="email"
+                placeholder="Your Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <button type="submit">Send OTP</button>
+              {message && <p>{message}</p>}
+            </form>
+          ) : (
+            <div>
+              <p>Logged in as: {session.user.email}</p>
+              <button onClick={handleLogout}>Logout</button>
+              {message && <p>{message}</p>}
+            </div>
+          )}
 
-                <section style={{ marginTop: '40px' }}>
-                  <h2>Entity Types</h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
-                    {entityTypes.map((type) => (
-                      <div key={type.id} style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px' }}>
-                        <h3>{type.name} ({type.id})</h3>
-                        <p>Attributes:</p>
-                        <ul>
-                          {type.predefinedAttributes.map((attr) => (
-                            <li key={attr.name}>{attr.name} ({attr.type}) {attr.required ? '(Required)' : ''}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+          {message.includes('OTP sent') && !session && (
+            <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px', marginTop: '20px' }}>
+              <input
+                type="text"
+                placeholder="Enter OTP"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value)}
+                required
+              />
+              <button type="submit">Verify OTP</button>
+            </form>
+          )}
+        </section>
 
-                <section style={{ marginTop: '40px' }}>
-                  <h2>Add New Entity</h2>
-                  <form onSubmit={handleAddEntity} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
-                    <input
-                      type="text"
-                      placeholder="ID (e.g., entity-001)"
-                      value={newEntity.id}
-                      onChange={(e) => setNewEntity({ ...newEntity, id: e.target.value })}
-                      required
-                    />
-                    <input
-                      type="text"
-                      placeholder="Name (e.g., My First Product)"
-                      value={newEntity.name}
-                      onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
-                      required
-                    />
-                    <select
-                      value={newEntity.typeId}
-                      onChange={(e) => setNewEntity({ ...newEntity, typeId: e.target.value })}
-                      required
-                    >
-                      <option value="">Select Entity Type</option>
+        <Routes>
+          <Route path="/" element={
+            <>
+              {session && (
+                <>
+                  <section style={{ marginTop: '40px' }}>
+                    <h2>Add New Entity Type</h2>
+                    <form onSubmit={handleAddEntityType} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
+                      <input
+                        type="text"
+                        placeholder="ID (e.g., product)"
+                        value={newEntityType.id}
+                        onChange={(e) => setNewEntityType({ ...newEntityType, id: e.target.value })}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Name (e.g., Product)"
+                        value={newEntityType.name}
+                        onChange={(e) => setNewEntityType({ ...newEntityType, name: e.target.value })}
+                        required
+                      />
+                      <textarea
+                        placeholder={"Predefined Attributes (JSON array, e.g., [{ \"name\": \"color\", \"type\": \"string\", \"required\": false, \"isUserDefined\": false }])"}
+                        value={JSON.stringify(newEntityType.predefinedAttributes)}
+                        onChange={(e) => {
+                          try {
+                            setNewEntityType({ ...newEntityType, predefinedAttributes: JSON.parse(e.target.value) });
+                          } catch (error) {
+                            console.error("Invalid JSON for attributes", error);
+                          }
+                        }}
+                        rows={5}
+                        style={{ width: '100%' }}
+                      />
+                      <button type="submit">Add Entity Type</button>
+                    </form>
+                  </section>
+
+                  <section style={{ marginTop: '40px' }}>
+                    <h2>Entity Types</h2>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
                       {entityTypes.map((type) => (
-                        <option key={type.id} value={type.id}>{type.name}</option>
+                        <div key={type.id} style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px' }}>
+                          <h3>{type.name} ({type.id})</h3>
+                          <p>Attributes:</p>
+                          <ul>
+                            {type.predefinedAttributes.map((attr) => (
+                              <li key={attr.name}>{attr.name} ({attr.type}) {attr.required ? '(Required)' : ''}</li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </select>
-                    {selectedEntityType && (
-                      <div style={{ border: '1px solid #eee', padding: '10px', borderRadius: '5px', marginTop: '10px' }}>
-                        <h3>Attributes for {selectedEntityType.name}</h3>
-                        {selectedEntityType.predefinedAttributes.map(attr => (
-                          <div key={attr.name} style={{ marginBottom: '10px' }}>
-                            <label>
-                              {attr.name} ({attr.type}) {attr.required && '(Required)'}:
-                              {attr.type === 'boolean' ? (
+                    </div>
+                  </section>
+
+                  <section style={{ marginTop: '40px' }}>
+                    <h2>Add New Entity</h2>
+                    <form onSubmit={handleAddEntity} style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px' }}>
+                      <input
+                        type="text"
+                        placeholder="ID (e.g., entity-001)"
+                        value={newEntity.id}
+                        onChange={(e) => setNewEntity({ ...newEntity, id: e.target.value })}
+                        required
+                      />
+                      <input
+                        type="text"
+                        placeholder="Name (e.g., My First Product)"
+                        value={newEntity.name}
+                        onChange={(e) => setNewEntity({ ...newEntity, name: e.target.value })}
+                        required
+                      />
+                      <select
+                        value={newEntity.typeId}
+                        onChange={(e) => setNewEntity({ ...newEntity, typeId: e.target.value })}
+                        required
+                      >
+                        <option value="">Select Entity Type</option>
+                        {entityTypes.map((type) => (
+                          <option key={type.id} value={type.id}>{type.name}</option>
+                        ))}
+                      </select>
+                      {selectedEntityType && (
+                        <div style={{ border: '1px solid #eee', padding: '10px', borderRadius: '5px', marginTop: '10px' }}>
+                          <h3>Attributes for {selectedEntityType.name}</h3>
+                          {selectedEntityType.predefinedAttributes.map(attr => (
+                            <div key={attr.name} style={{ marginBottom: '10px' }}>
+                              <label>
+                                {attr.name} ({attr.type}) {attr.required && '(Required)'}:
+                                {attr.type === 'boolean' ? (
+                                  <input
+                                    type="checkbox"
+                                    checked={newEntity.attributes?.find(a => a.name === attr.name)?.value || false}
+                                    onChange={(e) => handleAttributeChange(attr.name, e.target.checked, newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false)}
+                                    disabled={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable}
+                                  />
+                                ) : attr.type === 'number' ? (
+                                  <input
+                                    type="number"
+                                    value={newEntity.attributes?.find(a => a.name === attr.name)?.value || ''}
+                                    onChange={(e) => handleAttributeChange(attr.name, Number(e.target.value), newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false)}
+                                    disabled={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable}
+                                  />
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={newEntity.attributes?.find(a => a.name === attr.name)?.value || ''}
+                                    onChange={(e) => handleAttributeChange(attr.name, e.target.value, newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false)}
+                                    disabled={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable}
+                                  />
+                                )}
+                              </label>
+                              <label style={{ marginLeft: '10px' }}>
                                 <input
                                   type="checkbox"
-                                  checked={newEntity.attributes?.find(a => a.name === attr.name)?.value || false}
-                                  onChange={(e) => handleAttributeChange(attr.name, e.target.checked, newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false)}
-                                  disabled={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable}
+                                  checked={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false}
+                                  onChange={(e) => handleAttributeChange(attr.name, newEntity.attributes?.find(a => a.name === attr.name)?.value, e.target.checked)}
                                 />
-                              ) : attr.type === 'number' ? (
-                                <input
-                                  type="number"
-                                  value={newEntity.attributes?.find(a => a.name === attr.name)?.value || ''}
-                                  onChange={(e) => handleAttributeChange(attr.name, Number(e.target.value), newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false)}
-                                  disabled={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable}
-                                />
-                              ) : (
-                                <input
-                                  type="text"
-                                  value={newEntity.attributes?.find(a => a.name === attr.name)?.value || ''}
-                                  onChange={(e) => handleAttributeChange(attr.name, e.target.value, newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false)}
-                                  disabled={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable}
-                                />
-                              )}
-                            </label>
-                            <label style={{ marginLeft: '10px' }}>
-                              <input
-                                type="checkbox"
-                                checked={newEntity.attributes?.find(a => a.name === attr.name)?.notApplicable || false}
-                                onChange={(e) => handleAttributeChange(attr.name, newEntity.attributes?.find(a => a.name === attr.name)?.value, e.target.checked)}
-                              />
-                              N/A
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <button type="submit">Add Entity</button>
-                  </form>
-                </section>
-
-                <section style={{ marginTop: '40px' }}>
-                  <h2>Entities</h2>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-                    {entities.map((entity) => (
-                      <div key={entity.id} style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px' }}>
-                        <h3>{entity.name} (Type: {entity.typeId})</h3>
-                        <p>Owner: {entity.ownerId}</p>
-                        <p>Attributes:</p>
-                        <ul>
-                          {entity.attributes.map((attr) => (
-                            <li key={attr.name}>{attr.name}: {JSON.stringify(attr.value)} {attr.notApplicable ? '(N/A)' : ''}</li>
+                                N/A
+                              </label>
+                            </div>
                           ))}
-                        </ul>
-                        <Link to={`/entity/${entity.id}`} style={{ marginTop: '10px', display: 'block' }}>View Details</Link>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </>
-            } />
-            <Route path="/entity/:id" element={<EntityDetail session={session} />} />
-          </Routes>
-        )}
+                        </div>
+                      )}
+
+                      <button type="submit">Add Entity</button>
+                    </form>
+                  </section>
+
+                  <section style={{ marginTop: '40px' }}>
+                    <h2>Entities</h2>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                      {entities.map((entity) => (
+                        <div key={entity.id} style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px' }}>
+                          <h3>{entity.name} (Type: {entity.typeId})</h3>
+                          <p>Owner: {entity.ownerId}</p>
+                          <p>Attributes:</p>
+                          <ul>
+                            {entity.attributes.map((attr) => (
+                              <li key={attr.name}>{attr.name}: {JSON.stringify(attr.value)} {attr.notApplicable ? '(N/A)' : ''}</li>
+                            ))}
+                          </ul>
+                          <Link to={`/entity/${entity.id}`} style={{ marginTop: '10px', display: 'block' }}>View Details</Link>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              )}
+            </>
+          } />
+          <Route path="/entity/:id" element={<EntityDetail session={session} />} />
+        </Routes>
       </div>
     </Router>
   );
