@@ -146,6 +146,7 @@ const protect = asyncHandler(async (req: Request, res: Response, next: NextFunct
   }
 
   req.user = user; // Attach user to request object
+  console.log('DEBUG: Protect middleware - Final req.user.id:', req.user.id);
   next();
 });
 
@@ -310,7 +311,7 @@ app.post('/entities', protect, asyncHandler(async (req: Request, res: Response) 
 
 app.get('/entities', protect, asyncHandler(async (req: Request, res: Response) => {
   const ownerId = req.user.id; // Get ownerId from authenticated user
-  console.log('Fetching entities for owner:', ownerId);
+  console.log('DEBUG: Fetching entities for owner:', ownerId);
   const { data, error } = await req.supabase
     .from('gemini_cli_entities')
     .select('*')
