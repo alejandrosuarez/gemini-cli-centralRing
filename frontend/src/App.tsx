@@ -3,6 +3,7 @@ import axios from 'axios';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { MarketplacePage } from './components/MarketplacePage';
 import { createClient } from '@supabase/supabase-js';
+import type { Session, AuthChangeEvent } from '@supabase/supabase-js';
 
 // Supabase client initialization
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -55,7 +56,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 function App() {
   const [email, setEmail] = useState<string>('');
   const [otp, setOtp] = useState<string>('');
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [message, setMessage] = useState<string>('');
 
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
@@ -66,13 +67,13 @@ function App() {
 
   // Supabase Auth State Change Listener
   useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       console.log('DEBUG: Supabase auth state changed - Event:', _event, 'Session:', session);
       setSession(session);
     });
 
     // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       console.log('DEBUG: Initial getSession result:', session);
       setSession(session);
     });
@@ -221,7 +222,7 @@ function App() {
       await axios.post(`${API_BASE_URL}/entities`, { 
         ...newEntity, 
         attributes: attributesToSubmit,
-        ownerId: session.user.id, // Set ownerId from authenticated user
+        ownerId: session?.user.id, // Set ownerId from authenticated user
         createdAt: new Date(),
         updatedAt: new Date(),
         missingInfoAttributes: missingRequired, // Include missing attributes
